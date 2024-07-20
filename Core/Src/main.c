@@ -22,7 +22,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <stdbool.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -32,7 +32,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define CR_SIZE 4
+#define BUFFER_SIZE 100
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -41,16 +42,30 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+UART_HandleTypeDef huart1;
+
 osThreadId defaultTaskHandle;
 osThreadId AmplifierTaskHandle;
 osThreadId SerialTaskHandle;
 /* USER CODE BEGIN PV */
+
+bool StateAmplifier = false;
+bool OldStateAmplifier = false;
+bool MuteButtonState = false;
+uint8_t HEADER1[40] = {'\0'};
+char CR[CR_SIZE];
+
+uint8_t Rx_data[1];
+uint8_t Rx_buffer[BUFFER_SIZE];
+uint16_t Rx_index = 0;
+uint8_t SerialCommand = 0;
 
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_USART1_UART_Init(void);
 void StartDefaultTask(void const * argument);
 void StartAmplifierTask(void const * argument);
 void StartSerialTask(void const * argument);
@@ -92,8 +107,10 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
-
+  sprintf(HEADER1, "Initialized USB Serial Comunication \n");
+  HAL_UART_Transmit(&huart1, HEADER1, sizeof(HEADER1), 38);
   /* USER CODE END 2 */
 
   /* USER CODE BEGIN RTOS_MUTEX */
@@ -151,6 +168,7 @@ void SystemClock_Config(void)
 {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+  RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
 
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
@@ -175,6 +193,49 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USART1;
+  PeriphClkInit.Usart1ClockSelection = RCC_USART1CLKSOURCE_PCLK1;
+  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
+  {
+    Error_Handler();
+  }
+}
+
+/**
+  * @brief USART1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART1_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART1_Init 0 */
+
+  /* USER CODE END USART1_Init 0 */
+
+  /* USER CODE BEGIN USART1_Init 1 */
+
+  /* USER CODE END USART1_Init 1 */
+  huart1.Instance = USART1;
+  huart1.Init.BaudRate = 9600;
+  huart1.Init.WordLength = UART_WORDLENGTH_8B;
+  huart1.Init.StopBits = UART_STOPBITS_1;
+  huart1.Init.Parity = UART_PARITY_NONE;
+  huart1.Init.Mode = UART_MODE_TX_RX;
+  huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart1.Init.OverSampling = UART_OVERSAMPLING_16;
+  huart1.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
+  huart1.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_RXOVERRUNDISABLE_INIT|UART_ADVFEATURE_DMADISABLEONERROR_INIT;
+  huart1.AdvancedInit.OverrunDisable = UART_ADVFEATURE_OVERRUN_DISABLE;
+  huart1.AdvancedInit.DMADisableonRxError = UART_ADVFEATURE_DMA_DISABLEONRXERROR;
+  if (HAL_UART_Init(&huart1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART1_Init 2 */
+
+  /* USER CODE END USART1_Init 2 */
+
 }
 
 /**
@@ -214,6 +275,14 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
+
+
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+  HAL_UART_Receive_IT(&huart1, Rx_data, 1);
+}
+
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_StartDefaultTask */
@@ -247,11 +316,32 @@ void StartAmplifierTask(void const * argument)
   /* Infinite loop */
   for(;;)
   {
-	HAL_GPIO_WritePin(STANDBY__AMPLIFIER_GPIO_Port, STANDBY__AMPLIFIER_Pin, GPIO_PIN_SET);
-	osDelay(100);
-	HAL_GPIO_WritePin(STANDBY__AMPLIFIER_GPIO_Port, STANDBY__AMPLIFIER_Pin, GPIO_PIN_RESET);
-	osDelay(100);
-  }
+	MuteButtonState = HAL_GPIO_ReadPin(MUTE_BUTTON_GPIO_Port, MUTE_BUTTON_Pin); // GET STATE MUTE BUTTON 'CURRENT STATE IS NEGETIVE'
+	MuteButtonState = !MuteButtonState; 	// REVERSE NEGATIVE TO POSITIVE SIGNAL
+
+	if ((MuteButtonState == true && StateAmplifier == false)||(SerialCommand == 1 ))	//CHECK STATUS BUTTON
+	{
+		StateAmplifier = true;
+		HAL_GPIO_WritePin(STANDBY__AMPLIFIER_GPIO_Port, STANDBY__AMPLIFIER_Pin, GPIO_PIN_SET);
+		osDelay(200);
+		HAL_GPIO_WritePin(MUTE_AMPLIFIER_GPIO_Port, MUTE_AMPLIFIER_Pin, GPIO_PIN_SET);
+		MuteButtonState = false;
+		SerialCommand = 0;
+		osDelay(1000);
+	}
+	if ((MuteButtonState == true && StateAmplifier == true)||(SerialCommand == 2 ))	//CHECK STATUS BUTTON
+	{
+		StateAmplifier = false;
+		HAL_GPIO_WritePin(MUTE_AMPLIFIER_GPIO_Port, MUTE_AMPLIFIER_Pin, GPIO_PIN_RESET);
+		osDelay(200);
+		HAL_GPIO_WritePin(STANDBY__AMPLIFIER_GPIO_Port, STANDBY__AMPLIFIER_Pin, GPIO_PIN_RESET);
+		MuteButtonState = false;
+		SerialCommand = 0;
+		osDelay(1000);
+	}
+
+   }
+
   /* USER CODE END StartAmplifierTask */
 }
 
@@ -268,10 +358,54 @@ void StartSerialTask(void const * argument)
   /* Infinite loop */
   for(;;)
   {
-	HAL_GPIO_WritePin(MUTE_AMPLIFIER_GPIO_Port, MUTE_AMPLIFIER_Pin, GPIO_PIN_SET);
-	osDelay(50);
-	HAL_GPIO_WritePin(MUTE_AMPLIFIER_GPIO_Port, MUTE_AMPLIFIER_Pin, GPIO_PIN_RESET);
-	osDelay(50);
+	//--------------------FOR SERIAL COMUNICATION---------------------------------------------
+	osDelay(1);
+	//----------------------------TX COMUNICATION---------------------------------------------
+	MuteButtonState = HAL_GPIO_ReadPin(MUTE_BUTTON_GPIO_Port, MUTE_BUTTON_Pin); // GET STATE MUTE BUTTON 'CURRENT STATE IS NEGETIVE'
+	MuteButtonState = !MuteButtonState; 	// REVERSE NEGATIVE TO POSITIVE SIGNAL
+
+	if ((MuteButtonState == true)||(SerialCommand != 0))
+	{
+		if ((StateAmplifier == true)&&(StateAmplifier != OldStateAmplifier))
+		{
+			  sprintf(HEADER1, "Px_AMPLIFIER ON_Sx");
+			  sprintf(CR, "\r\n");
+			  HAL_UART_Transmit(&huart1, HEADER1, sizeof(HEADER1), 18);
+			  HAL_UART_Transmit(&huart1, (uint8_t *)CR, sizeof(CR), 0xFFFF);
+			  OldStateAmplifier = StateAmplifier;
+			  SerialCommand = 0;
+		}
+		else if ((StateAmplifier == false)&&(StateAmplifier != OldStateAmplifier))
+		{
+			  sprintf(HEADER1, "Px_AMPLIFIER OFF_Sx");
+			  sprintf(CR, "\r\n");
+			  HAL_UART_Transmit(&huart1, HEADER1, sizeof(HEADER1), 18);
+			  HAL_UART_Transmit(&huart1, (uint8_t *)CR, sizeof(CR), 0xFFFF);
+			  OldStateAmplifier = StateAmplifier;
+			  SerialCommand = 0;
+		}
+	}
+	//----------------------------RX COMUNICATION---------------------------------------------
+	HAL_UART_Receive_IT(&huart1, Rx_data, 1);
+	if (Rx_data[0] == 49) // COMMAND 1
+	{
+		sprintf(HEADER1, "Px_Command ON Amplifier Received_Sx");
+		sprintf(CR, "\r\n");
+		HAL_UART_Transmit(&huart1, HEADER1, sizeof(HEADER1), 35);
+		HAL_UART_Transmit(&huart1, (uint8_t *)CR, sizeof(CR), 0xFFFF);
+		SerialCommand = 1; 			//COMMAND START AMPIFIER AND SOUND
+		Rx_data[0] = 0;
+	}
+	else if ((Rx_data[0] == 50))    // COMMAND 2
+	{
+		sprintf(HEADER1, "Px_Command OFF Amplifier Received_Sx");
+		sprintf(CR, "\r\n");
+		HAL_UART_Transmit(&huart1, HEADER1, sizeof(HEADER1), 36);
+		HAL_UART_Transmit(&huart1, (uint8_t *)CR, sizeof(CR), 0xFFFF);
+		SerialCommand = 2;		   //COMMAND STOP AMPIFIER AND SOUND
+		Rx_data[0] = 0;
+	}
+
   }
   /* USER CODE END StartSerialTask */
 }
