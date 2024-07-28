@@ -254,7 +254,10 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOA_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, STANDBY__AMPLIFIER_Pin|MUTE_AMPLIFIER_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(STANDBY__AMPLIFIER_GPIO_Port, STANDBY__AMPLIFIER_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(MUTE_AMPLIFIER_GPIO_Port, MUTE_AMPLIFIER_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pins : STANDBY__AMPLIFIER_Pin MUTE_AMPLIFIER_Pin */
   GPIO_InitStruct.Pin = STANDBY__AMPLIFIER_Pin|MUTE_AMPLIFIER_Pin;
@@ -316,6 +319,7 @@ void StartAmplifierTask(void const * argument)
   /* Infinite loop */
   for(;;)
   {
+	osDelay(1);
 	MuteButtonState = HAL_GPIO_ReadPin(MUTE_BUTTON_GPIO_Port, MUTE_BUTTON_Pin); // GET STATE MUTE BUTTON 'CURRENT STATE IS NEGETIVE'
 	MuteButtonState = !MuteButtonState; 	// REVERSE NEGATIVE TO POSITIVE SIGNAL
 
@@ -324,7 +328,7 @@ void StartAmplifierTask(void const * argument)
 		StateAmplifier = true;
 		HAL_GPIO_WritePin(STANDBY__AMPLIFIER_GPIO_Port, STANDBY__AMPLIFIER_Pin, GPIO_PIN_SET);
 		osDelay(200);
-		HAL_GPIO_WritePin(MUTE_AMPLIFIER_GPIO_Port, MUTE_AMPLIFIER_Pin, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(MUTE_AMPLIFIER_GPIO_Port, MUTE_AMPLIFIER_Pin, GPIO_PIN_RESET);
 		MuteButtonState = false;
 		SerialCommand = 0;
 		osDelay(1000);
@@ -332,7 +336,7 @@ void StartAmplifierTask(void const * argument)
 	if ((MuteButtonState == true && StateAmplifier == true)||(SerialCommand == 2 ))	//CHECK STATUS BUTTON
 	{
 		StateAmplifier = false;
-		HAL_GPIO_WritePin(MUTE_AMPLIFIER_GPIO_Port, MUTE_AMPLIFIER_Pin, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(MUTE_AMPLIFIER_GPIO_Port, MUTE_AMPLIFIER_Pin, GPIO_PIN_SET);
 		osDelay(200);
 		HAL_GPIO_WritePin(STANDBY__AMPLIFIER_GPIO_Port, STANDBY__AMPLIFIER_Pin, GPIO_PIN_RESET);
 		MuteButtonState = false;
