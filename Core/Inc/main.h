@@ -49,8 +49,6 @@ extern "C" {
 
 /* USER CODE END EM */
 
-void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
-
 /* Exported functions prototypes ---------------------------------------------*/
 void Error_Handler(void);
 
@@ -61,6 +59,8 @@ void Error_Handler(void);
 /* Private defines -----------------------------------------------------------*/
 #define STANDBY__AMPLIFIER_Pin GPIO_PIN_0
 #define STANDBY__AMPLIFIER_GPIO_Port GPIOA
+#define MUTE_AMPLIFIER_Pin GPIO_PIN_1
+#define MUTE_AMPLIFIER_GPIO_Port GPIOA
 #define MUTE_BUTTON_Pin GPIO_PIN_2
 #define MUTE_BUTTON_GPIO_Port GPIOA
 
