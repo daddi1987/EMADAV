@@ -42,6 +42,8 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+TIM_HandleTypeDef htim2;
+
 UART_HandleTypeDef huart1;
 
 osThreadId defaultTaskHandle;
@@ -66,6 +68,7 @@ uint8_t SerialCommand = 0;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART1_UART_Init(void);
+static void MX_TIM2_Init(void);
 void StartDefaultTask(void const * argument);
 void StartAmplifierTask(void const * argument);
 void StartSerialTask(void const * argument);
@@ -108,6 +111,7 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART1_UART_Init();
+  MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
   sprintf(HEADER1, "Initialized USB Serial Comunication \n");
   HAL_UART_Transmit(&huart1, HEADER1, sizeof(HEADER1), 38);
@@ -202,6 +206,65 @@ void SystemClock_Config(void)
 }
 
 /**
+  * @brief TIM2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM2_Init(void)
+{
+
+  /* USER CODE BEGIN TIM2_Init 0 */
+
+  /* USER CODE END TIM2_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+
+  /* USER CODE BEGIN TIM2_Init 1 */
+
+  /* USER CODE END TIM2_Init 1 */
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 0;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.Period = 65535;
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 150;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_LOW;
+  sConfigOC.OCFastMode = TIM_OCFAST_ENABLE;
+  if (HAL_TIM_PWM_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM2_Init 2 */
+
+  /* USER CODE END TIM2_Init 2 */
+  HAL_TIM_MspPostInit(&htim2);
+
+}
+
+/**
   * @brief USART1 Initialization Function
   * @param None
   * @retval None
@@ -256,15 +319,12 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(STANDBY__AMPLIFIER_GPIO_Port, STANDBY__AMPLIFIER_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(MUTE_AMPLIFIER_GPIO_Port, MUTE_AMPLIFIER_Pin, GPIO_PIN_SET);
-
-  /*Configure GPIO pins : STANDBY__AMPLIFIER_Pin MUTE_AMPLIFIER_Pin */
-  GPIO_InitStruct.Pin = STANDBY__AMPLIFIER_Pin|MUTE_AMPLIFIER_Pin;
+  /*Configure GPIO pin : STANDBY__AMPLIFIER_Pin */
+  GPIO_InitStruct.Pin = STANDBY__AMPLIFIER_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+  HAL_GPIO_Init(STANDBY__AMPLIFIER_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : MUTE_BUTTON_Pin */
   GPIO_InitStruct.Pin = MUTE_BUTTON_Pin;
@@ -328,7 +388,9 @@ void StartAmplifierTask(void const * argument)
 		StateAmplifier = true;
 		HAL_GPIO_WritePin(STANDBY__AMPLIFIER_GPIO_Port, STANDBY__AMPLIFIER_Pin, GPIO_PIN_SET);
 		osDelay(200);
-		HAL_GPIO_WritePin(MUTE_AMPLIFIER_GPIO_Port, MUTE_AMPLIFIER_Pin, GPIO_PIN_RESET);
+		//HAL_GPIO_WritePin(MUTE_AMPLIFIER_GPIO_Port, MUTE_AMPLIFIER_Pin, GPIO_PIN_RESET);
+		TIM2->CCR2 = 110; // MAX VOLTAGE 4.20Vdc On Mute pin  110 Max Value
+		HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_2);
 		MuteButtonState = false;
 		SerialCommand = 0;
 		osDelay(1000);
@@ -336,7 +398,9 @@ void StartAmplifierTask(void const * argument)
 	if ((MuteButtonState == true && StateAmplifier == true)||(SerialCommand == 2 ))	//CHECK STATUS BUTTON
 	{
 		StateAmplifier = false;
-		HAL_GPIO_WritePin(MUTE_AMPLIFIER_GPIO_Port, MUTE_AMPLIFIER_Pin, GPIO_PIN_SET);
+		//HAL_GPIO_WritePin(MUTE_AMPLIFIER_GPIO_Port, MUTE_AMPLIFIER_Pin, GPIO_PIN_SET);
+		TIM2->CCR2 = 1; // MAX VOLTAGE 0.360Vdc On Mute pin
+		HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_2);
 		osDelay(200);
 		HAL_GPIO_WritePin(STANDBY__AMPLIFIER_GPIO_Port, STANDBY__AMPLIFIER_Pin, GPIO_PIN_RESET);
 		MuteButtonState = false;
